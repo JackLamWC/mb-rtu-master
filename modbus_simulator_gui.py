@@ -756,7 +756,7 @@ class ModbusSimulatorGUI:
             crc = self.modbus_crc16(frame_bytes)
             crc_low = crc & 0xFF
             crc_high = (crc >> 8) & 0xFF
-            complete_frame = frame_bytes + [crc_low, crc_high]
+            complete_frame = frame_bytes + [crc_high, crc_low]
             
             # Log the complete frame
             hex_frame = ' '.join([f"{b:02X}" for b in complete_frame])
