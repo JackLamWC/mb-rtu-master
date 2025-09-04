@@ -57,12 +57,19 @@ jobs:
           $VERSION = "${{ github.event.inputs.version }}"
         }
         
+        # Remove 'v' prefix if present to avoid double 'v' in filename
+        if ($VERSION.StartsWith("v")) {
+          $VERSION_CLEAN = $VERSION.Substring(1)
+        } else {
+          $VERSION_CLEAN = $VERSION
+        }
+        
         $oldExe = "dist/ModbusSimulator.exe"
-        $newExe = "dist/ModbusSimulator-v$VERSION.exe"
+        $newExe = "dist/ModbusSimulator-v$VERSION_CLEAN.exe"
         
         if (Test-Path $oldExe) {
           Copy-Item $oldExe $newExe
-          Write-Host "✅ Renamed executable to: ModbusSimulator-v$VERSION.exe"
+          Write-Host "✅ Renamed executable to: ModbusSimulator-v$VERSION_CLEAN.exe"
           $size = (Get-Item $newExe).Length / 1MB
           Write-Host "📦 Versioned executable size: $([math]::Round($size, 2)) MB"
         } else {
@@ -88,8 +95,15 @@ jobs:
           $VERSION = "${{ github.event.inputs.version }}"
         }
         
+        # Remove 'v' prefix if present to avoid double 'v' in filename
+        if ($VERSION.StartsWith("v")) {
+          $VERSION_CLEAN = $VERSION.Substring(1)
+        } else {
+          $VERSION_CLEAN = $VERSION
+        }
+        
         # Create versioned zip with proper structure
-        $zipName = "ModbusSimulator-v$VERSION-Windows.zip"
+        $zipName = "ModbusSimulator-v$VERSION_CLEAN-Windows.zip"
         
         # Verify contents before zipping
         Write-Host "📋 Contents to zip:"
@@ -118,6 +132,7 @@ jobs:
         
         # Store version for next step
         echo "VERSION=$VERSION" >> $env:GITHUB_ENV
+        echo "VERSION_CLEAN=$VERSION_CLEAN" >> $env:GITHUB_ENV
         echo "ZIP_NAME=$zipName" >> $env:GITHUB_ENV
         
     - name: Create GitHub Release
@@ -143,18 +158,18 @@ jobs:
           ### 📦 Download Options
           
           **🚀 Quick Start (Recommended)**
-          - Download `ModbusSimulator-v${{ env.VERSION }}.exe` - Single executable file, ready to run!
+          - Download `ModbusSimulator-v${{ env.VERSION_CLEAN }}.exe` - Single executable file, ready to run!
           
           **📁 Complete Package**  
-          - Download `ModbusSimulator-v${{ env.VERSION }}-Windows.zip` - Includes documentation and sample config
+          - Download `ModbusSimulator-v${{ env.VERSION_CLEAN }}-Windows.zip` - Includes documentation and sample config
           
           ### 💡 Installation
           **Option 1: Single Executable**
-          1. **Download** `ModbusSimulator-v${{ env.VERSION }}.exe`
+          1. **Download** `ModbusSimulator-v${{ env.VERSION_CLEAN }}.exe`
           2. **Run** directly - No installation or extraction needed!
           
           **Option 2: Complete Package**
-          1. **Download** `ModbusSimulator-v${{ env.VERSION }}-Windows.zip`
+          1. **Download** `ModbusSimulator-v${{ env.VERSION_CLEAN }}-Windows.zip`
           2. **Extract** to any folder on your computer
           3. **Run** `ModbusSimulator.exe` from the extracted folder
           
@@ -175,7 +190,7 @@ jobs:
           
           **Perfect for Modbus device testing, debugging, and development!**
         files: |
-          dist/ModbusSimulator-v${{ env.VERSION }}.exe
+          dist/ModbusSimulator-v${{ env.VERSION_CLEAN }}.exe
           ${{ env.ZIP_NAME }}
         draft: false
         prerelease: false
