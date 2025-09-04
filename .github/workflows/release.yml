@@ -1,0 +1,183 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags like v1.0.0
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install UV and dependencies
+      run: |
+        pip install uv
+        python -m uv sync
+        python -m uv add --dev pyinstaller
+        
+    - name: Build executable
+      run: |
+        python build.py
+        
+    - name: Verify build
+      run: |
+        if (Test-Path "dist/ModbusSimulator.exe") {
+          $size = (Get-Item "dist/ModbusSimulator.exe").Length / 1MB
+          Write-Host "✅ Executable created: $([math]::Round($size, 2)) MB"
+        } else {
+          Write-Host "❌ Build failed - executable not found"
+          exit 1
+        }
+    
+    - name: Rename executable with version
+      run: |
+        # Get version from tag or input
+        if ("${{ github.event_name }}" -eq "push") {
+          $VERSION = "${{ github.ref_name }}"
+        } else {
+          $VERSION = "${{ github.event.inputs.version }}"
+        }
+        
+        $oldExe = "dist/ModbusSimulator.exe"
+        $newExe = "dist/ModbusSimulator-v$VERSION.exe"
+        
+        if (Test-Path $oldExe) {
+          Copy-Item $oldExe $newExe
+          Write-Host "✅ Renamed executable to: ModbusSimulator-v$VERSION.exe"
+          $size = (Get-Item $newExe).Length / 1MB
+          Write-Host "📦 Versioned executable size: $([math]::Round($size, 2)) MB"
+        } else {
+          Write-Host "❌ Original executable not found: $oldExe"
+          exit 1
+        }
+        
+        if (Test-Path "ModbusSimulator_Portable/ModbusSimulator.exe") {
+          Write-Host "✅ Portable package created successfully"
+          Write-Host "📁 Portable package contents:"
+          Get-ChildItem "ModbusSimulator_Portable" | ForEach-Object { Write-Host "  - $($_.Name)" }
+        } else {
+          Write-Host "❌ Portable package not found"
+          exit 1
+        }
+        
+    - name: Create release package
+      run: |
+        # Get version from tag or input
+        if ("${{ github.event_name }}" -eq "push") {
+          $VERSION = "${{ github.ref_name }}"
+        } else {
+          $VERSION = "${{ github.event.inputs.version }}"
+        }
+        
+        # Create versioned zip with proper structure
+        $zipName = "ModbusSimulator-v$VERSION-Windows.zip"
+        
+        # Verify contents before zipping
+        Write-Host "📋 Contents to zip:"
+        Get-ChildItem "ModbusSimulator_Portable" -Recurse | ForEach-Object {
+          Write-Host "  $($_.FullName)"
+        }
+        
+        # Create the zip file
+        Compress-Archive -Path "ModbusSimulator_Portable\*" -DestinationPath $zipName -Force
+        
+        # Verify zip was created and check contents
+        if (Test-Path $zipName) {
+          $zipSize = (Get-Item $zipName).Length / 1MB
+          Write-Host "📦 Created release package: $zipName ($([math]::Round($zipSize, 2)) MB)"
+          
+          # List zip contents to verify
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $zipName).Path)
+          Write-Host "📋 Zip contents:"
+          $zip.Entries | ForEach-Object { Write-Host "  - $($_.FullName)" }
+          $zip.Dispose()
+        } else {
+          Write-Host "❌ Failed to create zip file"
+          exit 1
+        }
+        
+        # Store version for next step
+        echo "VERSION=$VERSION" >> $env:GITHUB_ENV
+        echo "ZIP_NAME=$zipName" >> $env:GITHUB_ENV
+        
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ env.VERSION }}
+        name: Modbus RTU Simulator ${{ env.VERSION }}
+        body: |
+          ## Modbus RTU Simulator ${{ env.VERSION }}
+          
+          ### 🚀 Features
+          - **Complete Modbus RTU communication** with PyModbus integration
+          - **Real-time register monitoring** with 64-register display
+          - **Multiple command types**: Read/Write Holding Registers, Input Registers, Coils
+          - **Raw command support** with automatic CRC calculation
+          - **Hex value display** with 0x prefix formatting
+          - **Command history logging** with timestamp and response time
+          - **Export functionality** to CSV and JSON formats
+          - **Frame analysis** with detailed Modbus frame logging
+          - **Connection management** with serial port detection
+          - **Error handling** with detailed troubleshooting messages
+          
+          ### 📦 Download Options
+          
+          **🚀 Quick Start (Recommended)**
+          - Download `ModbusSimulator-v${{ env.VERSION }}.exe` - Single executable file, ready to run!
+          
+          **📁 Complete Package**  
+          - Download `ModbusSimulator-v${{ env.VERSION }}-Windows.zip` - Includes documentation and sample config
+          
+          ### 💡 Installation
+          **Option 1: Single Executable**
+          1. **Download** `ModbusSimulator-v${{ env.VERSION }}.exe`
+          2. **Run** directly - No installation or extraction needed!
+          
+          **Option 2: Complete Package**
+          1. **Download** `ModbusSimulator-v${{ env.VERSION }}-Windows.zip`
+          2. **Extract** to any folder on your computer
+          3. **Run** `ModbusSimulator.exe` from the extracted folder
+          
+          ### 🔄 What's New
+          - Enhanced Modbus RTU communication with PyModbus
+          - Improved register display with 0x hex prefix
+          - Added raw command support with CRC validation
+          - Better error handling and troubleshooting
+          - Updated user interface with cleaner design
+          - Removed emoji from log messages for professional output
+          
+          ### 💡 Quick Start
+          - **Connect**: Select COM port, set baud rate and slave ID
+          - **Read**: Use "Read Holding Registers" to read device data
+          - **Write**: Use "Write Single Register" to write values
+          - **Raw**: Send custom Modbus commands with automatic CRC
+          - **Monitor**: View real-time register values with hex display
+          
+          **Perfect for Modbus device testing, debugging, and development!**
+        files: |
+          dist/ModbusSimulator-v${{ env.VERSION }}.exe
+          ${{ env.ZIP_NAME }}
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

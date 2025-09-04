@@ -1,0 +1,101 @@
+name: Build Modbus Simulator Executable
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install UV
+      run: |
+        pip install uv
+        
+    - name: Install dependencies
+      run: |
+        python -m uv sync
+        python -m uv add --dev pyinstaller
+        
+    - name: Build executable
+      run: |
+        python build.py
+        
+    - name: Test executable
+      run: |
+        # Test that the executable was created
+        if (Test-Path "dist/ModbusSimulator.exe") {
+          Write-Host "✅ Executable created successfully"
+          Get-Item "dist/ModbusSimulator.exe" | Select-Object Name, Length, LastWriteTime
+        } else {
+          Write-Host "❌ Executable not found"
+          exit 1
+        }
+        
+        # Test portable package was created
+        if (Test-Path "ModbusSimulator_Portable/ModbusSimulator.exe") {
+          Write-Host "✅ Portable package created successfully"
+          Get-ChildItem "ModbusSimulator_Portable" | Select-Object Name, Length
+        } else {
+          Write-Host "❌ Portable package not found"
+          exit 1
+        }
+        
+    - name: Get version from pyproject.toml
+      id: get-version
+      run: |
+        $version = (Get-Content "pyproject.toml" | Select-String 'version = "([^"]+)"').Matches[0].Groups[1].Value
+        echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+        echo "Version: $version"
+    
+    - name: Rename executable with version
+      run: |
+        $version = "${{ steps.get-version.outputs.VERSION }}"
+        $oldExe = "dist/ModbusSimulator.exe"
+        $newExe = "dist/ModbusSimulator-v$version.exe"
+        
+        if (Test-Path $oldExe) {
+          Copy-Item $oldExe $newExe
+          Write-Host "✅ Renamed executable to: ModbusSimulator-v$version.exe"
+          Get-Item $newExe | Select-Object Name, Length, LastWriteTime
+        } else {
+          Write-Host "❌ Original executable not found: $oldExe"
+          exit 1
+        }
+    
+    - name: Upload build artifacts (for testing)
+      uses: actions/upload-artifact@v4
+      with:
+        name: ModbusSimulator-v${{ steps.get-version.outputs.VERSION }}-Build-${{ github.sha }}
+        path: |
+          dist/ModbusSimulator-v${{ steps.get-version.outputs.VERSION }}.exe
+          ModbusSimulator_Portable/
+        retention-days: 7
+
+  notify:
+    needs: [build-windows]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Build status notification
+      run: |
+        if [ "${{ needs.build-windows.result }}" == "success" ]; then
+          echo "✅ Build completed successfully!"
+          echo "📦 Artifacts are available for download"
+        else
+          echo "❌ Build failed!"
+          echo "🔍 Check the logs for details"
+        fi
